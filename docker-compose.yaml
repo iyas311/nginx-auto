@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+
+  frontend:
+    build: ./frotend
+    container_name: frontend
+    networks:
+      - frontend-net
+
+  backend:
+    build: ./backend
+    container_name: backend
+    networks:
+      - backend-net
+
+  nginx:
+    build: ./nginx
+    container_name: nginx
+    ports:
+      - "80:80"
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - frontend-net
+      - backend-net
+
+networks:
+  frontend-net:
+  backend-net:

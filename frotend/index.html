@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Frontend</title>
+</head>
+
+<body>
+
+<h1>Frontend Page</h1>
+
+<button onclick="callAPI()">Call Backend</button>
+
+<script>
+async function callAPI(){
+  const res = await fetch("/api");
+  const data = await res.json();
+  alert(data.message);
+}
+</script>
+
+</body>
+</html>
