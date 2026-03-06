@@ -4,27 +4,155 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Frontend</title>
+  <title>Premium Store Admin</title>
   <link rel="stylesheet" href="style.css">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 
 <body>
 
-  <div class="container">
-    <h1>Frontend Page</h1>
-    <p>Welcome to the premium frontend experience.</p>
-    <button class="primary-btn" onclick="callAPI()">Call Backend</button>
+  <div class="app-container">
+    <header>
+      <h1>Store Inventory</h1>
+      <p>Manage your product catalog</p>
+    </header>
+
+    <div class="content-grid">
+      <!-- Add Product Form -->
+      <div class="card form-card">
+        <h2>Add New Product</h2>
+        <form id="addProductForm" onsubmit="addProduct(event)">
+          <div class="form-group">
+            <label for="name">Product Name</label>
+            <input type="text" id="name" required placeholder="e.g. Wireless Mouse">
+          </div>
+          <div class="form-group">
+            <label for="category">Category</label>
+            <input type="text" id="category" required placeholder="e.g. Electronics">
+          </div>
+          <div class="form-group">
+            <label for="price">Price ($)</label>
+            <input type="number" id="price" step="0.01" required placeholder="e.g. 29.99">
+          </div>
+          <button type="submit" class="primary-btn full-width" id="submitBtn">Add Product</button>
+        </form>
+        <div id="statusMessage" class="status-msg"></div>
+      </div>
+
+      <!-- Product List -->
+      <div class="card list-card">
+        <div class="list-header">
+          <h2>Product Catalog</h2>
+          <button class="icon-btn" onclick="fetchProducts()" title="Refresh">↻ Refresh</button>
+        </div>
+        <div id="loading" class="loading">Loading products...</div>
+        <ul id="productList" class="product-list">
+          <!-- Products will be injected here via JS -->
+        </ul>
+      </div>
+    </div>
   </div>
 
   <script>
-    async function callAPI() {
+    // Fetch and display products on load
+    document.addEventListener('DOMContentLoaded', fetchProducts);
+
+    async function fetchProducts() {
+      const listElement = document.getElementById('productList');
+      const loadingElement = document.getElementById('loading');
+
+      listElement.innerHTML = '';
+      loadingElement.style.display = 'block';
+
       try {
-        const res = await fetch("/api");
-        const data = await res.json();
-        alert(data.message);
+        const res = await fetch("/api/products");
+        if (!res.ok) throw new Error("Failed to fetch");
+
+        const products = await res.json();
+        loadingElement.style.display = 'none';
+
+        // Handle empty dictionary case
+        if (Object.keys(products).length === 0) {
+          listElement.innerHTML = '<li class="empty-state">No products found. Add one!</li>';
+          return;
+        }
+
+        // Create list items for each product
+        for (const [id, product] of Object.entries(products)) {
+          const li = document.createElement('li');
+          li.className = 'product-item';
+          li.innerHTML = `
+                <div class="product-info">
+                    <span class="product-name">${product.name}</span>
+                    <span class="product-category tag">${product.category}</span>
+                </div>
+                <span class="product-price">$${product.price.toFixed(2)}</span>
+            `;
+          listElement.appendChild(li);
+        }
       } catch (e) {
-        alert("Error calling backend");
+        loadingElement.style.display = 'none';
+        listElement.innerHTML = '<li class="error-state">Failed to load products. Is the backend running?</li>';
+        console.error(e);
+      }
+    }
+
+    async function addProduct(event) {
+      event.preventDefault();
+
+      const submitBtn = document.getElementById('submitBtn');
+      const statusMsg = document.getElementById('statusMessage');
+
+      // Get form values
+      const name = document.getElementById('name').value;
+      const category = document.getElementById('category').value;
+      const price = parseFloat(document.getElementById('price').value);
+
+      // Prepare payload
+      const payload = { name, category, price };
+
+      // UI Update: loading state
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Adding...';
+      statusMsg.className = 'status-msg'; // Reset class
+      statusMsg.textContent = '';
+
+      try {
+        const res = await fetch("/api/products", {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          // Success
+          statusMsg.textContent = '✓ Product added successfully!';
+          statusMsg.classList.add('success');
+          document.getElementById('addProductForm').reset();
+          fetchProducts(); // Refresh the list
+        } else {
+          // Error from backend
+          statusMsg.textContent = '✗ Error: ' + (data.detail || 'Failed to add product');
+          statusMsg.classList.add('error');
+        }
+      } catch (e) {
+        statusMsg.textContent = '✗ Network error. Is the backend running?';
+        statusMsg.classList.add('error');
+        console.error(e);
+      } finally {
+        // UI Update: restore button
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Add Product';
+
+        // Hide success message after 3 seconds
+        if (statusMsg.classList.contains('success')) {
+          setTimeout(() => {
+            statusMsg.textContent = '';
+            statusMsg.className = 'status-msg';
+          }, 3000);
+        }
       }
     }
   </script>
