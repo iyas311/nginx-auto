@@ -202,7 +202,7 @@ jobs:
           EOF
 
       - name: Upload Report Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: build-report
           path: report.html
