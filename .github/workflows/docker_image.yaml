@@ -20,13 +20,13 @@ jobs:
         with:
            fetch-depth:  0
 
-      # - name: Run Snyk on backend
-      #   uses: snyk/actions/python@master
-      #   continue-on-error: true
-      #   with:
-      #     args: --file=backend/requirements.txt --package-manager=pip
-      #   env:
-      #     SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Run Snyk on backend
+        uses: snyk/actions/python@master
+        continue-on-error: true
+        with:
+          args: --file=backend/requirements.txt --package-manager=pip
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
 
       - uses: SonarSource/sonarqube-scan-action@v6
