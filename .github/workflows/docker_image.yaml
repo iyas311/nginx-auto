@@ -24,10 +24,10 @@ jobs:
         uses: snyk/actions/python@master
         continue-on-error: true
         with:
-          args: --file=backend/requirements.txt --package-manager=pip
+          args: --file=requirements.txt --package-manager=pip --sarif-file-output=snyk.sarif
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
+        working-directory: backend
 
       - uses: SonarSource/sonarqube-scan-action@v6
         env:
