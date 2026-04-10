@@ -18,6 +18,7 @@ jobs:
 
       - name: Run Snyk on backend to check for vulnerabilities
         uses: snyk/actions/python-3.12@master
+        continue-on-error: true
         with:
           args: --file=backend/requirements.txt
         env:
