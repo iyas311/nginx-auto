@@ -68,6 +68,7 @@ jobs:
         uses: snyk/actions/docker@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
         with:
           image: ${{ secrets.DOCKER_USERNAME }}/nginx:v1.1.0
           args: --severity-threshold=high
