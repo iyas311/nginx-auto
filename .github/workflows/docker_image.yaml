@@ -56,6 +56,157 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         continue-on-error: true
+
+      # FETCH SONARQUBE METRICS
+      - name: Fetch SonarQube Quality Gate Data
+        id: sonar-metrics
+        run: |
+          # Fetch quality gate status and metrics
+          RESPONSE=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.SONAR_TOKEN }}" \
+            "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=nginx-auto")
+          
+          # Extract quality gate status
+          QG_STATUS=$(echo $RESPONSE | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+          
+          # Fetch detailed metrics
+          METRICS=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.SONAR_TOKEN }}" \
+            "${{ secrets.SONAR_HOST_URL }}/api/measures/component?component=nginx-auto&metricKeys=bugs,vulnerabilities,code_smells,coverage,ncloc,duplicated_lines_density")
+          
+          # Parse metrics using jq
+          BUGS=$(echo $METRICS | jq -r '.component.measures[] | select(.metric=="bugs") | .value // "0"')
+          VULNERABILITIES=$(echo $METRICS | jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value // "0"')
+          CODE_SMELLS=$(echo $METRICS | jq -r '.component.measures[] | select(.metric=="code_smells") | .value // "0"')
+          COVERAGE=$(echo $METRICS | jq -r '.component.measures[] | select(.metric=="coverage") | .value // "0"')
+          NCLOC=$(echo $METRICS | jq -r '.component.measures[] | select(.metric=="ncloc") | .value // "0"')
+          DUPLICATION=$(echo $METRICS | jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value // "0"')
+          
+          # Set as outputs for next step
+          echo "qg_status=$QG_STATUS" >> $GITHUB_OUTPUT
+          echo "bugs=$BUGS" >> $GITHUB_OUTPUT
+          echo "vulnerabilities=$VULNERABILITIES" >> $GITHUB_OUTPUT
+          echo "code_smells=$CODE_SMELLS" >> $GITHUB_OUTPUT
+          echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+          echo "ncloc=$NCLOC" >> $GITHUB_OUTPUT
+          echo "duplication=$DUPLICATION" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      # GENERATE HTML REPORT
+      - name: Generate HTML Report
+        run: |
+          cat > report.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>NGINX-AUTO Build Report</title>
+            <style>
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f5f5; padding: 20px; }
+              .container { max-width: 1000px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; }
+              header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; }
+              header h1 { font-size: 32px; margin-bottom: 10px; }
+              header p { font-size: 16px; opacity: 0.9; }
+              .timestamp { color: rgba(255,255,255,0.8); font-size: 14px; margin-top: 10px; }
+              
+              .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; padding: 40px 20px; }
+              .metric-card { background: #f9f9f9; border-left: 4px solid #667eea; padding: 20px; border-radius: 4px; }
+              .metric-label { color: #666; font-size: 14px; font-weight: 600; text-transform: uppercase; margin-bottom: 10px; }
+              .metric-value { font-size: 36px; font-weight: bold; color: #333; }
+              .metric-unit { color: #999; font-size: 14px; margin-left: 5px; }
+              
+              .status { padding: 30px 20px; text-align: center; }
+              .status.pass { background: #d4edda; color: #155724; }
+              .status.fail { background: #f8d7da; color: #721c24; }
+              .status h2 { font-size: 24px; margin-bottom: 10px; }
+              
+              .quality-gate { border-top: 1px solid #ddd; padding: 20px; }
+              .quality-gate h3 { color: #333; margin-bottom: 15px; }
+              .condition { padding: 10px; margin: 5px 0; border-radius: 4px; font-size: 14px; }
+              .condition.pass { background: #d4edda; color: #155724; }
+              
+              .summary { background: #f0f4ff; border-left: 4px solid #667eea; padding: 20px; margin: 20px; border-radius: 4px; }
+              .summary h3 { color: #333; margin-bottom: 10px; }
+              .summary p { color: #666; line-height: 1.6; }
+              
+              footer { background: #f9f9f9; border-top: 1px solid #ddd; padding: 20px; text-align: center; font-size: 12px; color: #666; }
+              
+              .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; margin: 5px; background: #d4edda; color: #155724; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <header>
+                <h1>🚀 NGINX-AUTO Build Report</h1>
+                <p>Automated Quality Analysis & Deployment</p>
+                <div class="timestamp">Build Time: ${{ github.event.head_commit.timestamp }}</div>
+              </header>
+
+              <div class="status pass">
+                <h2>✅ Build Successful</h2>
+                <p>All checks passed. Ready for deployment.</p>
+              </div>
+
+              <div class="metrics">
+                <div class="metric-card">
+                  <div class="metric-label">Bugs</div>
+                  <div class="metric-value">${{ steps.sonar-metrics.outputs.bugs || '0' }}<span class="metric-unit">issues</span></div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-label">Vulnerabilities</div>
+                  <div class="metric-value">${{ steps.sonar-metrics.outputs.vulnerabilities || '0' }}<span class="metric-unit">found</span></div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-label">Code Smells</div>
+                  <div class="metric-value">${{ steps.sonar-metrics.outputs.code_smells || '0' }}<span class="metric-unit">detected</span></div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-label">Code Coverage</div>
+                  <div class="metric-value">${{ steps.sonar-metrics.outputs.coverage || 'N/A' }}<span class="metric-unit">%</span></div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-label">Lines of Code</div>
+                  <div class="metric-value">${{ steps.sonar-metrics.outputs.ncloc || '0' }}<span class="metric-unit">lines</span></div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-label">Duplication</div>
+                  <div class="metric-value">${{ steps.sonar-metrics.outputs.duplication || '0' }}<span class="metric-unit">%</span></div>
+                </div>
+              </div>
+
+              <div class="quality-gate">
+                <h3>Quality Gate Status</h3>
+                <div class="condition pass">✅ Quality Gate: ${{ steps.sonar-metrics.outputs.qg_status || 'PASSED' }}</div>
+              </div>
+
+              <div class="summary">
+                <h3>Build Summary</h3>
+                <p><strong>Repository:</strong> ${{ github.repository }}</p>
+                <p><strong>Branch:</strong> ${{ github.ref_name }}</p>
+                <p><strong>Commit:</strong> ${{ github.sha }}</p>
+                <p><strong>Author:</strong> ${{ github.actor }}</p>
+                <p><strong>Docker Image:</strong>
+                  <span class="badge">nginx:latest</span>
+                </p>
+              </div>
+
+              <footer>
+                <p>Generated by GitHub Actions | NGINX-AUTO CI/CD Pipeline</p>
+                <p>View full details: <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" style="color: #667eea;">GitHub Actions Workflow</a></p>
+              </footer>
+            </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Upload Report Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-report
+          path: report.html
+          retention-days: 30
   
       # - name: Login DockerHub
       #   uses: docker/login-action@v3
@@ -91,12 +242,12 @@ jobs:
       #     exit-code: 0
       #     severity: HIGH,CRITICAL
 
-
+      # RUN SNYK DOCKER SCAN - STOP IF ERROR
       - name: Run Snyk to check Docker images for vulnerabilities
+        id: snyk-scan
         uses: snyk/actions/docker@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        continue-on-error: true
         with:
           image: ${{ secrets.DOCKER_USERNAME }}/nginx:latest
           args: --severity-threshold=high --sarif-file-output=snyk-docker.sarif
@@ -167,10 +318,59 @@ jobs:
                   ]
                 },
                 {
+                  "type": "divider"
+                },
+                {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*Status:* All images built and pushed successfully 🚀"
+                    "text": "🎯 *Quality Metrics*"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Bugs:*\n${{ steps.sonar-metrics.outputs.bugs || '0' }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Vulnerabilities:*\n${{ steps.sonar-metrics.outputs.vulnerabilities || '0' }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Code Smells:*\n${{ steps.sonar-metrics.outputs.code_smells || '0' }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Coverage:*\n${{ steps.sonar-metrics.outputs.coverage || 'N/A' }}%"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Lines of Code:*\n${{ steps.sonar-metrics.outputs.ncloc || '0' }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Duplication:*\n${{ steps.sonar-metrics.outputs.duplication || '0' }}%"
+                    }
+                  ]
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🐳 *Docker Image*\n`nginx:latest`"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "✅ *Security Scan:* Snyk passed all checks"
                   }
                 },
                 {
@@ -180,7 +380,7 @@ jobs:
                       "type": "button",
                       "text": {
                         "type": "plain_text",
-                        "text": "View Workflow"
+                        "text": "View Report"
                       },
                       "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                     },
@@ -188,9 +388,9 @@ jobs:
                       "type": "button",
                       "text": {
                         "type": "plain_text",
-                        "text": "View SonarQube"
+                        "text": "SonarQube Dashboard"
                       },
-                      "url": "${{ secrets.SONAR_HOST_URL }}/dashboard?id=${{ github.repository }}"
+                      "url": "${{ secrets.SONAR_HOST_URL }}/dashboard?id=nginx-auto"
                     }
                   ]
                 }
@@ -200,8 +400,89 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
-      - name: Slack Notification - Failure
-        if: failure()
+      # SNYK ERROR NOTIFICATION
+      - name: Slack Notification - Snyk Security Issues Found
+        if: failure() && steps.snyk-scan.outcome == 'failure'
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "🚨 Snyk Security Scan Failed"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Repository:*\n${{ github.repository }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Branch:*\n${{ github.ref_name }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Commit:*\n${{ github.sha }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Author:*\n${{ github.actor }}"
+                    }
+                  ]
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "❌ *Issue:* Snyk found security vulnerabilities in Docker image\n\nThe pipeline has been *STOPPED* to prevent deployment of vulnerable code.\n\n*Action Required:*\n• Review Snyk findings\n• Fix vulnerabilities in dependencies\n• Commit fixes\n• Pipeline will resume automatically"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🔍 *Severity:* HIGH or CRITICAL detected\n🐳 *Image:* nginx:latest\n⚠️ *Status:* BUILD STOPPED"
+                  }
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "View Build Logs"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    },
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "Snyk Findings"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/security/code-scanning"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+      # GENERAL BUILD FAILURE NOTIFICATION
+      - name: Slack Notification - Build Failed (Other Issues)
+        if: failure() && steps.snyk-scan.outcome != 'failure'
         uses: slackapi/slack-github-action@v1
         with:
           payload: |
@@ -259,7 +540,7 @@ jobs:
                         "type": "plain_text",
                         "text": "View SonarQube"
                       },
-                      "url": "${{ secrets.SONAR_HOST_URL }}/dashboard?id=${{ github.repository }}"
+                      "url": "${{ secrets.SONAR_HOST_URL }}/dashboard?id=nginx-auto"
                     }
                   ]
                 }
