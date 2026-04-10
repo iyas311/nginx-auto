@@ -61,35 +61,46 @@ jobs:
       - name: Fetch SonarQube Quality Gate Data
         id: sonar-metrics
         run: |
-          # Fetch quality gate status and metrics
+          set -e
+
+          echo "Fetching SonarQube Quality Gate..."
+
+          # Fetch quality gate status
           RESPONSE=$(curl -s \
             -H "Authorization: Bearer ${{ secrets.SONAR_TOKEN }}" \
             "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=nginx-auto")
-          
-          # Extract quality gate status
-          QG_STATUS=$(echo $RESPONSE | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
-          
-          # Fetch detailed metrics
+
+          # Safe parsing using jq
+          QG_STATUS=$(echo "$RESPONSE" | jq -r '.projectStatus.status // "UNKNOWN"')
+
+          echo "Quality Gate Status: $QG_STATUS"
+
+          # Fetch metrics
           METRICS=$(curl -s \
             -H "Authorization: Bearer ${{ secrets.SONAR_TOKEN }}" \
             "${{ secrets.SONAR_HOST_URL }}/api/measures/component?component=nginx-auto&metricKeys=bugs,vulnerabilities,code_smells,coverage,ncloc,duplicated_lines_density")
-          
-          # Parse metrics using jq
-          BUGS=$(echo $METRICS | jq -r '.component.measures[] | select(.metric=="bugs") | .value // "0"')
-          VULNERABILITIES=$(echo $METRICS | jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value // "0"')
-          CODE_SMELLS=$(echo $METRICS | jq -r '.component.measures[] | select(.metric=="code_smells") | .value // "0"')
-          COVERAGE=$(echo $METRICS | jq -r '.component.measures[] | select(.metric=="coverage") | .value // "0"')
-          NCLOC=$(echo $METRICS | jq -r '.component.measures[] | select(.metric=="ncloc") | .value // "0"')
-          DUPLICATION=$(echo $METRICS | jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value // "0"')
-          
-          # Set as outputs for next step
-          echo "qg_status=$QG_STATUS" >> $GITHUB_OUTPUT
-          echo "bugs=$BUGS" >> $GITHUB_OUTPUT
-          echo "vulnerabilities=$VULNERABILITIES" >> $GITHUB_OUTPUT
-          echo "code_smells=$CODE_SMELLS" >> $GITHUB_OUTPUT
-          echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
-          echo "ncloc=$NCLOC" >> $GITHUB_OUTPUT
-          echo "duplication=$DUPLICATION" >> $GITHUB_OUTPUT
+
+          # Parse metrics safely
+          BUGS=$(echo "$METRICS" | jq -r '.component.measures[]? | select(.metric=="bugs") | .value // "0"')
+          VULNERABILITIES=$(echo "$METRICS" | jq -r '.component.measures[]? | select(.metric=="vulnerabilities") | .value // "0"')
+          CODE_SMELLS=$(echo "$METRICS" | jq -r '.component.measures[]? | select(.metric=="code_smells") | .value // "0"')
+          COVERAGE=$(echo "$METRICS" | jq -r '.component.measures[]? | select(.metric=="coverage") | .value // "0"')
+          NCLOC=$(echo "$METRICS" | jq -r '.component.measures[]? | select(.metric=="ncloc") | .value // "0"')
+          DUPLICATION=$(echo "$METRICS" | jq -r '.component.measures[]? | select(.metric=="duplicated_lines_density") | .value // "0"')
+
+          echo "Metrics fetched successfully"
+
+          # Write outputs safely
+          {
+            echo "qg_status=$QG_STATUS"
+            echo "bugs=${BUGS:-0}"
+            echo "vulnerabilities=${VULNERABILITIES:-0}"
+            echo "code_smells=${CODE_SMELLS:-0}"
+            echo "coverage=${COVERAGE:-0}"
+            echo "ncloc=${NCLOC:-0}"
+            echo "duplication=${DUPLICATION:-0}"
+          } >> "$GITHUB_OUTPUT"
+
         continue-on-error: true
 
       # GENERATE HTML REPORT
