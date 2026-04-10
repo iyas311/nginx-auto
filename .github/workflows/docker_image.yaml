@@ -16,19 +16,11 @@ jobs:
         with:
            fetch-depth:  0
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install backend dependencies
-        run: pip install -r backend/requirements.txt
-
       - name: Run Snyk on backend
         uses: snyk/actions/python@master
         continue-on-error: true
         with:
-          args: --file=backend/requirements.txt
+          args: --file=backend/requirements.txt --package-manager=pip
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
