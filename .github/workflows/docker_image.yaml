@@ -54,7 +54,7 @@ jobs:
 
       - name: Tag nginx
         run: docker tag ${{ secrets.DOCKER_USERNAME }}/nginx:latest ${{ secrets.DOCKER_USERNAME }}/nginx:v1.1.0
-      - name: Scan the image of nginx
+      # - name: Scan the image of nginx
         # uses: aquasecurity/trivy-action@v0.20.0
         # with:
         #   image-ref: ${{ secrets.DOCKER_USERNAME }}/nginx:v1.1.0
