@@ -20,6 +20,16 @@ jobs:
         with:
            fetch-depth:  0
 
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'  # Adjust to your Python version
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
       - name: Run Snyk on backend
         uses: snyk/actions/python@master
         continue-on-error: true
@@ -27,8 +37,6 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           args: --file=backend/requirements.txt --sarif-file-output=snyk.sarif
-              
-
       - uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
